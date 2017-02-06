@@ -2,6 +2,7 @@ package zappos.com.ilovezappos;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -23,36 +24,69 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 
-class MyOnClickListener implements View.OnClickListener
-{
-    private Recycler_View_Adapter adapter;
-    private String query;
-    public MyOnClickListener(String query, Recycler_View_Adapter adapter) {
-        this.query = query;
-        this.adapter = adapter;
-    }
+import static zappos.com.ilovezappos.MainActivity.*;
 
-    @Override
-    public void onClick(View v)
-    {
-        Log.v("EditText", query);
-        int i = 0;
-        while(i<10) {
-            adapter.insert(i, new Data("New Item", query+String.valueOf(i), R.drawable.ic_menu_camera));
-            i++;
-        }
-    }
-
-};
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
 
+    class MyOnClickListener implements View.OnClickListener
+    {
+        private Recycler_View_Adapter adapter;
+        private EditText query;
+
+        public MyOnClickListener(EditText query, Recycler_View_Adapter adapter) {
+            this.query = query;
+            this.adapter = adapter;
+        }
+
+        @Override
+        public void onClick(View v)
+        {
+            //Log.v("EditText", query);
+            String q = query.getText().toString();
+            new HttpAsyncTask().execute("https://api.zappos.com/Search?term="+q+"&key=b743e26728e16b81da139182bb2094357c31d331");
+           /* try {
+                //JSONArray items = json.getJSONArray("results");
+                Context context = getApplicationContext();
+                CharSequence text = (CharSequence) items.getJSONObject(0).get("brandName");
+                int duration = Toast.LENGTH_SHORT;
+
+                Toast toast = Toast.makeText(context, text, duration);
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }*/
+            //etResponse.setText();
+            int i = 0;
+            while(i<10) {
+                adapter.insert(i, new Data("New Item", q+String.valueOf(i), R.drawable.ic_menu_camera));
+                i++;
+            }
+        }
+
+    };
+
     RecyclerView recyclerView;
     private Recycler_View_Adapter adapter;
+    JSONObject json;
+    JSONArray items;
+    //static EditText etResponse;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,16 +96,18 @@ public class MainActivity extends AppCompatActivity
         setSupportActionBar(toolbar);
 
         EditText searchQ = (EditText) findViewById(R.id.searchText);
-        String str = searchQ.getText().toString();
+        //String str = searchQ.getText().toString();
+        //etResponse = (EditText) findViewById(R.id.res);
 
         Button search = (Button) findViewById(R.id.searchButton);
-
+        //new HttpAsyncTask().execute("https://api.zappos.com/Search?term=nike&key=b743e26728e16b81da139182bb2094357c31d331");
         List<Data> data = fill_with_data();
         recyclerView = (RecyclerView) findViewById(R.id.recyclerview);
         adapter = new Recycler_View_Adapter(data, getApplication());
         recyclerView.setAdapter(adapter);
         //recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setLayoutManager(new StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL));
+        search.setOnClickListener(new MyOnClickListener(searchQ, adapter));
 
         recyclerView.addOnItemTouchListener(new CustomRVItemTouchListener(this, recyclerView, new RecyclerViewItemClickListener() {
             @Override
@@ -82,7 +118,8 @@ public class MainActivity extends AppCompatActivity
 
                 Toast toast = Toast.makeText(context, text, duration);
                 toast.show();
-                Intent intent = new Intent(MainActivity.this,ItemActivity.class);
+                Intent intent = new Intent(MainActivity.this, ItemActivity.class);
+
                 startActivity(intent);
             }
 
@@ -92,7 +129,6 @@ public class MainActivity extends AppCompatActivity
             }
         }));
 
-        search.setOnClickListener(new MyOnClickListener(str, adapter));
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -173,5 +209,70 @@ public class MainActivity extends AppCompatActivity
         /*data.add(new Data("Batman vs Superman", "Following the destruction of Metropolis, Batman embarks on a personal vendetta against Superman ", R.drawable.ic_action_movie));
 */
         return data;
+    }
+
+    public static String GET(String url) {
+        InputStream inputStream = null;
+        String result = "";
+        try {
+
+            // create HttpClient
+            HttpClient httpclient = new DefaultHttpClient();
+
+            // make GET request to the given URL
+            HttpResponse httpResponse = httpclient.execute(new HttpGet(url));
+
+            // receive response as inputStream
+            inputStream = httpResponse.getEntity().getContent();
+
+            // convert inputstream to string
+            if (inputStream != null)
+                result = convertInputStreamToString(inputStream);
+            else
+                result = "Did not work!";
+
+        } catch (Exception e) {
+            Log.d("InputStream", e.getLocalizedMessage());
+        }
+
+        return result;
+    }
+
+    private static String convertInputStreamToString(InputStream inputStream) throws IOException {
+        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream));
+        String line = "";
+        String result = "";
+        while ((line = bufferedReader.readLine()) != null)
+            result += line;
+
+        inputStream.close();
+        return result;
+
+    }
+
+    class HttpAsyncTask extends AsyncTask<String, Void, String> {
+        @Override
+        protected String doInBackground(String... urls) {
+            return GET(urls[0]);
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            Toast.makeText(getBaseContext(), "Received!", Toast.LENGTH_LONG).show();
+            try{
+                json = new JSONObject(result);
+                items = json.getJSONArray("results");
+                Context context = getApplicationContext();
+                CharSequence text = (CharSequence) items.getJSONObject(0).get("brandName");
+                int duration = Toast.LENGTH_SHORT;
+
+                Toast toast = Toast.makeText(context, text, duration);
+                //etResponse.setText(result);
+                //Log.v("items", String.valueOf(items.getJSONObject(0).get("brandName")));
+            }catch (Exception e){
+                e.printStackTrace();
+            }
+            //etResponse.setText(result);
+        }
     }
 }
